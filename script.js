@@ -91,8 +91,9 @@ function updateMapData() {
   const last = state.runner.at(-1); if (last) { if (!state.marker) { const el = document.createElement("div"); el.className = "runner-marker"; state.marker = new maplibregl.Marker({ element: el }).setLngLat([last.lng, last.lat]).addTo(map); } else state.marker.setLngLat([last.lng, last.lat]); }
 }
 function sampleTerrain() {
-  if (!state.map || !state.profile.length || !state.map.getTerrain()) return;
-  let changes = 0; state.profile.forEach(p => { const z = state.map.queryTerrainElevation([p.lng, p.lat], { exaggerated: false }); if (Number.isFinite(z) && Math.abs((p.elevation || 0) - z) > .2) { p.elevation = z; changes++; } });
+  if (!state.map || !state.profile.length || !state.map.getTerrain() || state.terrainReady) return;
+  let changes = 0; state.profile.forEach(p => { if (Number.isFinite(p.elevation)) return; const z = state.map.queryTerrainElevation([p.lng, p.lat], { exaggerated: false }); if (Number.isFinite(z)) { p.elevation = z; changes++; } });
+  state.terrainReady = state.profile.every(p => Number.isFinite(p.elevation));
   if (changes) { drawProfile(); renderStats(); }
 }
 
