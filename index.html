@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Personal live tracker for Sarah Huebner at Mammoth 2026.">
+  <title>Sarah Huebner · Mammoth 2026</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="eyebrow">MAMMOTH 2026 · LIVE TRACKER</span><h1>Sarah Huebner <span id="bib">#313</span></h1></div>
+    <div class="header-controls">
+      <div class="segmented" aria-label="Basemap"><button data-style="streets" class="active">Streets</button><button data-style="topo">Topo</button><button data-style="imagery">Imagery</button></div>
+      <button id="units-toggle" class="quiet-button" title="Switch units">MI / FT</button>
+      <button id="theme-toggle" class="quiet-button" title="Toggle color theme">◐</button>
+      <button id="refresh" class="refresh-button"><span>↻</span> Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="status-strip" aria-live="polite">
+      <span class="status-dot"></span><span id="status">Loading course data…</span><span class="divider">·</span><span id="updated">—</span><a href="https://trackleaders.com/spot/mammoth26/" target="_blank" rel="noopener">Data: Trackleaders.com ↗</a>
+    </section>
+
+    <section class="workspace">
+      <div class="map-panel panel"><div id="map" aria-label="3D terrain map"></div><div class="map-tools" aria-label="Map view controls"><button id="reset-view" title="Fit the entire course">Reset view</button><button id="north-view" title="Align map north">North ↑</button><button id="view-mode" title="Switch between 2D and 3D">2D view</button></div><div class="map-note">Drag to explore · click a runner ping or aid station for details</div><div class="map-legend"><i class="route-key"></i> Course <i class="track-key"></i> Sarah</div></div>
+      <aside class="stats-panel panel">
+        <div class="panel-heading"><div><span class="eyebrow">CURRENT POSITION</span><h2 id="progress-title">—</h2></div><span id="freshness" class="pill">—</span></div>
+        <div id="hero-stats" class="hero-stats"></div>
+        <div class="section-rule"></div>
+        <div class="panel-heading small"><div><span class="eyebrow" id="selection-label">FULL COURSE</span><h3 id="selection-title">Course statistics</h3></div><button id="clear-selection" class="text-button" hidden>Clear</button></div>
+        <div id="selection-stats" class="stat-grid"></div>
+        <div class="section-rule"></div>
+        <div class="next-stop"><span class="eyebrow">NEXT AID STATION</span><strong id="next-station">—</strong><small id="next-station-detail">—</small></div>
+        <p class="method-note">Progress uses Trackleaders’ reported route mile when available. Pace uses tracker timestamps; moving pace excludes intervals with negligible progress.</p>
+      </aside>
+    </section>
+
+    <section class="profile-panel panel">
+      <div class="profile-header"><div><span class="eyebrow">ELEVATION PROFILE</span><h2 id="profile-title">Full course</h2></div><div class="profile-instruction">Drag across the profile to inspect a route section</div></div>
+      <div id="profile-wrap"><svg id="profile" role="img" aria-label="Interactive course elevation profile"></svg><div id="profile-tooltip" class="profile-tooltip" hidden></div></div>
+      <div class="profile-axis"><span>Start</span><span id="profile-end">Finish</span></div>
+    </section>
+  </main>
+  <div id="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
