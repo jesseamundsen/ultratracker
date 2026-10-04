@@ -1,6 +1,6 @@
 /* global maplibregl */
 const SETTINGS_KEY = "ultratracker-settings";
-const state = { metric: false, dark: false, style: "streets", is2D: false, mapCamera: null, pendingPitch: null, route: [], profile: [], checkpoints: [], runner: [], selection: null, brushDomain: null, map: null, marker: null, stationHover: null, terrainReady: false };
+const state = { metric: false, dark: false, style: "streets", is2D: false, mapCamera: null, pendingPitch: null, route: [], profile: [], checkpoints: [], runner: [], selection: null, brushDomain: null, map: null, marker: null, stationHover: null, stationLabels: [], terrainReady: false };
 const MILES_PER_METER = 0.000621371;
 const styles = {
   streets: { name: "OpenStreetMap", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], attribution: "© OpenStreetMap contributors", maxzoom: 19 },
@@ -64,16 +64,16 @@ function installMapLayers() {
   map.addLayer({ id: "selected-runner-track", type: "line", source: "active-track", paint: { "line-color": "#f3c74d", "line-width": 6, "line-opacity": .82 } });
   map.addLayer({ id: "runner-points", type: "circle", source: "runner-pings", paint: { "circle-radius": 4.5, "circle-color": "#e65038", "circle-stroke-width": 1.5, "circle-stroke-color": "#fff" } });
   map.addLayer({ id: "station-circles", type: "circle", source: "stations", paint: { "circle-radius": 6, "circle-color": "#f3c74d", "circle-stroke-color": "#203b36", "circle-stroke-width": 2 } });
-  map.addLayer({ id: "station-labels", type: "symbol", source: "stations", layout: { "text-field": ["get", "shortName"], "text-size": 10, "text-offset": [0, 1.15], "text-anchor": "top", "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#1d2928", "text-halo-color": "#fbfcf8", "text-halo-width": 1.5 } });
-  ["station-circles", "station-labels"].forEach(layer => { map.off("click", layer, onStationClick); map.off("mouseenter", layer, onStationHover); map.off("mouseleave", layer, onStationLeave); map.on("click", layer, onStationClick); map.on("mouseenter", layer, onStationHover); map.on("mouseleave", layer, onStationLeave); });
+  map.off("click", "station-circles", onStationClick); map.off("mouseenter", "station-circles", onStationHover); map.off("mouseleave", "station-circles", onStationLeave); map.on("click", "station-circles", onStationClick); map.on("mouseenter", "station-circles", onStationHover); map.on("mouseleave", "station-circles", onStationLeave);
   map.off("click", "runner-points", onRunnerClick); map.off("mouseenter", "runner-points", pointerCursor); map.off("mouseleave", "runner-points", clearCursor);
   map.on("click", "runner-points", onRunnerClick); map.on("mouseenter", "runner-points", pointerCursor); map.on("mouseleave", "runner-points", clearCursor);
-  updateMapData();
+  installStationLabels(); updateMapData();
 }
 function routeGeoJson() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: state.route.map(p => [p.lng, p.lat]) } }; }
 function trackGeoJson() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: state.runner.map(p => [p.lng, p.lat]) } }; }
 function runnerPointsGeoJson() { return { type: "FeatureCollection", features: state.runner.map(p => ({ type: "Feature", properties: { number: p.number, mile: p.mile, mph: p.mph, feet: p.feet, timeMs: p.timeMs, lowConfidence: p.lowConfidence }, geometry: { type: "Point", coordinates: [p.lng, p.lat] } })) }; }
 function stationFeature(s, index) { return { type: "Feature", properties: { ...s, stationIndex: index, shortName: s.name.replace(/^\d+:\s*/, "") }, geometry: { type: "Point", coordinates: [s.lng, s.lat] } }; }
+function installStationLabels() { state.stationLabels.forEach(marker => marker.remove()); state.stationLabels = state.checkpoints.map((station, stationIndex) => { const label = document.createElement("button"); label.className = "station-map-label"; label.type = "button"; label.textContent = station.name.replace(/^\d+:\s*/, ""); label.title = `${station.name} · click for station details`; label.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); showStation({ properties: { ...station, stationIndex, mile: station.mile }, geometry: { coordinates: [station.lng, station.lat] } }); }); return new maplibregl.Marker({ element: label, anchor: "top", offset: [0, 10] }).setLngLat([station.lng, station.lat]).addTo(state.map); }); }
 function stationStops() { return state.checkpoints.flatMap((station, stationIndex) => [{ station, stationIndex, mile: Number(station.mile) }, ...(station.visits || []).map(mile => ({ station, stationIndex, mile: Number(mile) }))]).sort((a, b) => a.mile - b.mile); }
 function stationDetails(station, mile) { const stops = stationStops(), index = stops.findIndex(stop => stop.station === station && Math.abs(stop.mile - mile) < .001), previous = stops[index - 1], next = stops[index + 1], total = state.route.at(-1)?.mile || 0, profilePoint = closestProfile(mile); return { previous, next, total, elevation: profilePoint?.elevation }; }
 function escapeHtml(value) { return String(value).replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]); }
