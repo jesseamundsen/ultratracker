@@ -12,7 +12,6 @@ import re
 import time
 
 ROOT = Path(__file__).resolve().parent
-SETTINGS_PATH = ROOT / ".ultratracker-settings.json"
 BASE = "https://trackleaders.com/spot/mammoth26/"
 URLS = {"route": BASE + "route.js", "checkpoints": BASE + "checkgen.js", "runner": BASE + "Sarah_Huebner.js"}
 CACHE = {}
@@ -100,14 +99,6 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args): print(f"[{self.log_date_time_string()}] {fmt % args}")
     def do_GET(self):
         path = urlparse(self.path).path
-        if path == "/api/settings":
-            try:
-                saved = json.loads(SETTINGS_PATH.read_text()) if SETTINGS_PATH.exists() else {}
-                if not isinstance(saved, dict): saved = {}
-            except (OSError, json.JSONDecodeError):
-                saved = {}
-            body = json.dumps(saved, separators=(",", ":")).encode()
-            self.send_response(200); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body); return
         if path.startswith("/api/"):
             kind = path.removeprefix("/api/")
             if kind not in URLS:
@@ -121,21 +112,6 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_response(502); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
             return
         return super().do_GET()
-
-    def do_POST(self):
-        if urlparse(self.path).path != "/api/settings":
-            self.send_error(404, "Unknown endpoint"); return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            if length < 1 or length > 16384: raise ValueError("invalid request size")
-            saved = json.loads(self.rfile.read(length))
-            if not isinstance(saved, dict): raise ValueError("settings must be an object")
-            temporary = SETTINGS_PATH.with_suffix(".tmp")
-            temporary.write_text(json.dumps(saved, separators=(",", ":")))
-            temporary.replace(SETTINGS_PATH)
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            self.send_error(400, str(exc)); return
-        self.send_response(204); self.end_headers()
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("127.0.0.1", 8000), Handler)
