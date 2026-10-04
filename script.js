@@ -12,7 +12,8 @@ const $ = (selector) => document.querySelector(selector);
 // that race-local zone rather than converting timestamps to the viewer's zone.
 const fmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", month: "short", day: "numeric", timeZone: "America/Los_Angeles", timeZoneName: "short" });
 
-function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ metric: state.metric, dark: state.dark, style: state.style, is2D: state.is2D, selection: state.selection, mapCamera: state.mapCamera })); } catch {} }
+function captureMapCamera() { if (!state.map) return; const center = state.map.getCenter(); state.mapCamera = { center: [center.lng, center.lat], zoom: state.map.getZoom(), bearing: state.map.getBearing(), pitch: state.is2D ? 0 : Math.max(1, state.map.getPitch()) }; }
+function saveSettings() { captureMapCamera(); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ metric: state.metric, dark: state.dark, style: state.style, is2D: state.is2D, selection: state.selection, mapCamera: state.mapCamera })); } catch {} }
 function restoreSettings() { try { const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); state.metric = saved.metric === true; state.dark = saved.dark === true; state.style = styles[saved.style] ? saved.style : "streets"; state.is2D = saved.is2D === true; state.selection = Array.isArray(saved.selection) && saved.selection.length === 2 && saved.selection.every(Number.isFinite) ? saved.selection : null; const camera = saved.mapCamera; state.mapCamera = camera && Array.isArray(camera.center) && camera.center.length === 2 && camera.center.every(Number.isFinite) && Number.isFinite(camera.zoom) && Number.isFinite(camera.bearing) && Number.isFinite(camera.pitch) ? camera : null; } catch {} }
 function syncSettingsControls() { document.documentElement.classList.toggle("dark", state.dark); $("#units-toggle").textContent = state.metric ? "KM / M" : "MI / FT"; $("#view-mode").textContent = state.is2D ? "3D view" : "2D view"; document.querySelectorAll("[data-style]").forEach(button => button.classList.toggle("active", button.dataset.style === state.style)); }
 
@@ -39,13 +40,13 @@ function mapStyle() {
   }, layers: [{ id: "base", type: "raster", source: "base"}, { id: "hillshade", type: "hillshade", source: "terrain", paint: { "hillshade-exaggeration": .35 } }] };
 }
 function initMap() {
-  const camera = state.mapCamera || { center: [-118.86, 37.72], zoom: 9.3, pitch: state.is2D ? 0 : 58, bearing: -12 };
+  const savedCamera = state.mapCamera || { center: [-118.86, 37.72], zoom: 9.3, pitch: 58, bearing: -12 }, camera = { ...savedCamera, pitch: state.is2D ? 0 : Math.max(1, savedCamera.pitch) };
   state.map = new maplibregl.Map({ container: "map", style: mapStyle(), ...camera, maxPitch: 82, antialias: true });
   state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   state.map.on("load", installMapLayers);
   state.map.on("style.load", installMapLayers);
   state.map.on("idle", sampleTerrain);
-  state.map.on("moveend", () => { const center = state.map.getCenter(); state.mapCamera = { center: [center.lng, center.lat], zoom: state.map.getZoom(), bearing: state.map.getBearing(), pitch: state.map.getPitch() }; saveSettings(); });
+  state.map.on("moveend", saveSettings);
 }
 function installMapLayers() {
   const map = state.map; if (!state.route.length || map.getSource("course")) return;
@@ -145,9 +146,9 @@ async function getJSON(path){ const response=await fetch(path,{cache:"no-store"}
 async function loadCourse(){ const [route,checks]=await Promise.all([getJSON("/api/route"),getJSON("/api/checkpoints")]); state.route=lineDistanceAndProfile(route.points); state.profile=reduceForProfile(state.route); state.checkpoints=checks.checkpoints; const total = state.route.at(-1)?.mile || 0; if (!state.selection || state.selection[0] < 0 || state.selection[1] > total || state.selection[0] >= state.selection[1]) state.selection = null; }
 async function refreshRunner(initial=false){ const button=$("#refresh"); button.disabled=true; button.innerHTML="<span>↻</span> Refreshing"; try { const runner=await getJSON("/api/runner"); state.runner=normalizeRunner(runner.points); saveSnapshots(); if(state.map){ updateMapData(); sampleTerrain(); } renderStats(); drawProfile(); $("#status").textContent=`Tracking ${runner.runner} · ${state.runner.length} received points`; if(!initial)toast("Runner track refreshed"); } catch(error) { const saved=loadSnapshots(); if(saved.length && initial){ state.runner=normalizeRunner(saved); toast("Live refresh unavailable — showing saved snapshot"); renderStats(); drawProfile(); } else { toast(error.message); $("#status").textContent="Unable to refresh runner data"; } } finally { button.disabled=false; button.innerHTML="<span>↻</span> Refresh"; } }
 function courseBounds() { return state.route.reduce((bounds, point) => bounds.extend([point.lng, point.lat]), new maplibregl.LngLatBounds([state.route[0].lng, state.route[0].lat], [state.route[0].lng, state.route[0].lat])); }
-function resetMapView() { if (!state.map || !state.route.length) return; state.is2D = false; syncSettingsControls(); saveSettings(); state.map.fitBounds(courseBounds(), { padding: 60, maxZoom: 11, duration: 650, bearing: 0, pitch: 58 }); }
-function alignNorth() { if (state.map) state.map.easeTo({ bearing: 0, duration: 350 }); }
-function toggleViewMode() { if (!state.map) return; state.is2D = !state.is2D; syncSettingsControls(); saveSettings(); state.map.easeTo({ pitch: state.is2D ? 0 : 58, duration: 450 }); }
+function resetMapView() { if (!state.map || !state.route.length) return; state.is2D = false; syncSettingsControls(); state.mapCamera = { ...state.mapCamera, pitch: 58, bearing: 0 }; saveSettings(); state.map.fitBounds(courseBounds(), { padding: 60, maxZoom: 11, duration: 650, bearing: 0, pitch: 58 }); }
+function alignNorth() { if (state.map) { state.mapCamera = { ...state.mapCamera, bearing: 0 }; saveSettings(); state.map.easeTo({ bearing: 0, duration: 350 }); } }
+function toggleViewMode() { if (!state.map) return; state.is2D = !state.is2D; syncSettingsControls(); state.mapCamera = { ...state.mapCamera, pitch: state.is2D ? 0 : 58 }; saveSettings(); state.map.easeTo({ pitch: state.is2D ? 0 : 58, duration: 450 }); }
 function bindControls(){ $("#refresh").addEventListener("click",()=>refreshRunner()); $("#units-toggle").addEventListener("click",()=>{state.metric=!state.metric; syncSettingsControls(); saveSettings(); drawProfile();renderStats();}); $("#theme-toggle").addEventListener("click",()=>{state.dark=!state.dark;syncSettingsControls();saveSettings();drawProfile();}); document.querySelectorAll("[data-style]").forEach(button=>button.addEventListener("click",()=>{state.style=button.dataset.style;syncSettingsControls();saveSettings();state.map.setStyle(mapStyle());})); $("#reset-view").addEventListener("click",resetMapView); $("#north-view").addEventListener("click",alignNorth); $("#view-mode").addEventListener("click",toggleViewMode); $("#clear-selection").addEventListener("click",()=>{state.selection=null;saveSettings();drawProfile();renderStats();updateMapData();resetMapView();}); window.addEventListener("resize",drawProfile); }
-async function boot(){ restoreSettings(); syncSettingsControls(); bindControls(); try { await loadCourse(); initMap(); await refreshRunner(true); $("#status").textContent="Course loaded · fetching live runner track"; } catch(error) { $("#status").textContent="Could not load course data"; toast(error.message); } }
+async function boot(){ restoreSettings(); syncSettingsControls(); bindControls(); window.addEventListener("pagehide", saveSettings); try { await loadCourse(); initMap(); await refreshRunner(true); $("#status").textContent="Course loaded · fetching live runner track"; } catch(error) { $("#status").textContent="Could not load course data"; toast(error.message); } }
 boot();
