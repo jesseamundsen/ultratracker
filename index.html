@@ -67,7 +67,8 @@ main { max-width:1680px; padding:0 clamp(16px,3vw,42px) 30px; margin:auto; }.sta
   <script>
 /* global maplibregl */
 const SETTINGS_KEY = "ultratracker-settings";
-const state = { metric: false, dark: false, style: "streets", is2D: true, mapCamera: null, pendingPitch: null, route: [], profile: [], checkpoints: [], runner: [], selection: null, brushDomain: null, fullElevationTotals: null, fullElevationTotalsLocked: false, map: null, marker: null, stationLabels: [], terrainReady: false, refreshInFlight: false, autoRefreshTimer: null, autoRefreshCountdown: null, nextRefreshAt: 0 };
+const TILE_SESSION_KEY = Date.now().toString(36);
+const state = { metric: false, dark: false, style: "streets", is2D: true, mapCamera: null, pendingPitch: null, route: [], profile: [], checkpoints: [], runner: [], selection: null, brushDomain: null, fullElevationTotals: null, fullElevationTotalsLocked: false, map: null, marker: null, stationLabels: [], terrainReady: false, terrainSurveyComplete: false, refreshInFlight: false, autoRefreshTimer: null, autoRefreshCountdown: null, nextRefreshAt: 0 };
 const MILES_PER_METER = 0.000621371;
 const styles = {
   streets: { name: "OpenStreetMap", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], attribution: "© OpenStreetMap contributors", maxzoom: 19 },
@@ -145,9 +146,10 @@ function reduceForProfile(points, count = 750) {
 }
 function mapStyle() {
   const base = styles[state.style];
+  const freshTileUrl = url => `${url}${url.includes("?") ? "&" : "?"}ultratracker=${TILE_SESSION_KEY}`;
   return { version: 8, sources: {
-    base: { type: "raster", tiles: base.tiles, tileSize: 256, attribution: base.attribution, maxzoom: base.maxzoom },
-    terrain: { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"], tileSize: 256, encoding: "terrarium", maxzoom: 15, attribution: "Elevation tiles: AWS Terrain Tiles" }
+    base: { type: "raster", tiles: base.tiles.map(freshTileUrl), tileSize: 256, attribution: base.attribution, maxzoom: base.maxzoom },
+    terrain: { type: "raster-dem", tiles: [freshTileUrl("https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png")], tileSize: 256, encoding: "terrarium", maxzoom: 15, attribution: "Elevation tiles: AWS Terrain Tiles" }
   }, layers: [{ id: "base", type: "raster", source: "base"}, { id: "hillshade", type: "hillshade", source: "terrain", paint: { "hillshade-exaggeration": .35 } }] };
 }
 function initMap() {
@@ -177,7 +179,19 @@ function installMapLayers() {
   map.off("click", "station-circles", onStationClick); map.off("mouseenter", "station-circles", pointerCursor); map.off("mouseleave", "station-circles", clearCursor); map.on("click", "station-circles", onStationClick); map.on("mouseenter", "station-circles", pointerCursor); map.on("mouseleave", "station-circles", clearCursor);
   map.off("click", "runner-hit-area", onRunnerClick); map.off("mouseenter", "runner-hit-area", pointerCursor); map.off("mouseleave", "runner-hit-area", clearCursor);
   map.on("click", "runner-hit-area", onRunnerClick); map.on("mouseenter", "runner-hit-area", pointerCursor); map.on("mouseleave", "runner-hit-area", clearCursor);
-  installStationLabels(); updateMapData();
+  installStationLabels(); updateMapData(); surveyFullCourseTerrain();
+}
+function surveyFullCourseTerrain() {
+  const map = state.map;
+  if (!map || state.terrainSurveyComplete || !state.route.length) return;
+  state.terrainSurveyComplete = true;
+  const center = map.getCenter(), restore = { center: [center.lng, center.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+  map.once("idle", () => {
+    sampleTerrain();
+    map.jumpTo(restore);
+    requestAnimationFrame(sampleTerrain);
+  });
+  map.fitBounds(courseBounds(), { padding: 18, maxZoom: 10, duration: 0, bearing: 0, pitch: 0 });
 }
 function routeGeoJson() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: state.route.map(p => [p.lng, p.lat]) } }; }
 function trackGeoJson() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: state.runner.map(p => [p.lng, p.lat]) } }; }
