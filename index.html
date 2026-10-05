@@ -217,7 +217,7 @@ function updateMapData() {
 }
 function sampleTerrain() {
   if (!state.map || !state.profile.length || !state.map.getTerrain() || state.terrainReady) return;
-  let changes = 0; state.profile.forEach(p => { if (Number.isFinite(p.elevation)) return; const z = state.map.queryTerrainElevation([p.lng, p.lat], { exaggerated: false }); if (Number.isFinite(z)) { p.elevation = z; changes++; } });
+  let changes = 0; state.profile.forEach(p => { if (Number.isFinite(p.elevation) && Math.abs(p.elevation) > 1) return; const z = state.map.queryTerrainElevation([p.lng, p.lat], { exaggerated: false }); if (Number.isFinite(z) && Math.abs(z) > 1) { p.elevation = z; changes++; } });
   state.terrainReady = state.profile.every(p => Number.isFinite(p.elevation));
   if (changes) { drawProfile(); renderStats(); }
 }
